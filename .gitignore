@@ -1,7 +1,8 @@
 # MAC OS
 .DS_Store
 
-.pdf
+*.pdf
+*.pickle
 
 # Editors
 .vscode/
@@ -128,3 +129,4 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
