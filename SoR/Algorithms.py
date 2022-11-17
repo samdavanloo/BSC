@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
+# Define the class for Bregman SoR method
+
 
 class Bregman_SoR:
     """ parrent class for SOR algorithms, based on the risk-averse of quadratic function, provide function and gradient estimators for this specific problem and Bregman method
@@ -22,8 +24,8 @@ class Bregman_SoR:
         x_traj: trajectory of x
         x_hat_traj: trajectory of x_hat
         val_F_traj: trajectory of deterministic function value
-        Dh1_x_hat, Dh2_x_hat: D_h(x_hat^{k+1}, x_hat^k)
-        Dh1_x_hat_avg, Dh1_x_hat_avg: 1/k sum_0^k D_h(x_hat^{k+1}, x_hat^k)
+        Dh1, Dh2: D_h(x_hat^{k+1}, x_hat^k)
+        Dh1_avg, Dh1_x_avg: 1/k sum_0^k D_h(x_hat^{k+1}, x_hat^k)
 
     """
 
@@ -46,19 +48,15 @@ class Bregman_SoR:
         self.x_traj = np.zeros([self.d, self.max_iter])  # traj of x
         # traj of x_hat(calculated based on determinastic function)
         self.x_hat_traj = np.zeros([self.d, self.max_iter])
-        self.x_hat_avg_traj = np.zeros([self.d, self.max_iter])
         # traj of determinastic function value
         self.val_F_traj = np.zeros(self.max_iter)
-        # D_h1(x_hat^{k+1}- x_hat^k) with tau and k1
-        self.Dh1_traj = []
-        # D_h2(x_hat^{k+1}- x_hat^k) with tau and k2
-        self.Dh2_traj = []
+        # determinastic gradient and sample gradient
+        self.grad_Fdet_traj = np.zeros([self.d, self.max_iter])
+        self.grad_F_traj = np.zeros([self.d, self.max_iter])
+        # D_h1,2(x_hat^{k+1}- x_hat^k)
+        self.Dh1_traj, self.Dh2_traj = [],[]
         # average of all previous iterations
-        self.Dh1_avg_traj = []
-        self.Dh2_avg_traj = []
-
-        self._flag_Dh = False
-        self._flag_Dh_avg = False
+        self.Dh1_avg_traj, self.Dh2_avg_traj = [], []
 
     def _sample_A(self):
         # sample the A mattrix
@@ -120,34 +118,34 @@ class Bregman_SoR:
 
         return u
 
-    def _get_x_hat(self, x):
-        # return the x_hat for given x using the Bregman method
+    def _get_grad_Fdet(self, x):
         val_g = self._get_val_g(self.A, x)
         v_det = self._get_grad_g(self.A, x)
         s_det = self._get_grad_f(val_g)
-        grad_F = v_det.T @ s_det
-        x_hat = self._solve_Breg_sub(x, grad_F)
-        return x_hat
+        grad_Fdet = v_det.T @ s_det
+        return grad_Fdet
 
     def train(self):
         x = self.x_init
 
         # initial sample
-        # A_sample = self._sample_A()
-        # u = self._get_val_g(A_sample, x)
+        A_sample = self._sample_A()
+        u = self._get_val_g(A_sample, x)
 
-        # A_sample = self._sample_A()
-        # v = self._get_grad_g(A_sample, x)
-        # s = self._get_grad_f(u)
-        # w = v.T @ s
+        A_sample = self._sample_A()
+        v = self._get_grad_g(A_sample, x)
+        s = self._get_grad_f(u)
+        w = v.T @ s
 
-        w = np.random.randn(self.d)
-        u = np.random.randn(2)
+        grad_Fdet = self._get_grad_Fdet(x)
+        x_hat = self._solve_Breg_sub(x, grad_Fdet)
 
         # save initial information
         self.x_traj[:, 0] = x
-        self.x_hat_traj[:, 0] = self._get_x_hat(x)
+        self.x_hat_traj[:, 0] = x_hat
         self.val_F_traj[0] = self._get_val_F(x)
+        self.grad_Fdet_traj[:, 0] = grad_Fdet
+        self.grad_F_traj[:, 0] = w
 
         for iter in range(1, self.max_iter):
             x_pre = x
@@ -161,11 +159,15 @@ class Bregman_SoR:
             v = self._get_grad_g(A_sample, x)
             s = self._get_grad_f(u)
             w = v.T @ s
+            grad_Fdet = self._get_grad_Fdet(x)
+            x_hat = self._solve_Breg_sub(x, grad_Fdet)
 
             # save information
             self.x_traj[:, iter] = x
-            self.x_hat_traj[:, iter] = self._get_x_hat(x)
+            self.x_hat_traj[:, iter] = x_hat
             self.val_F_traj[iter] = self._get_val_F(x)
+            self.grad_Fdet_traj[:, iter] = grad_Fdet
+            self.grad_F_traj[:, iter] = w
 
     def calculate_Dh(self):
         # calculate Dh_1 and Dh_2 for x_hat
@@ -180,7 +182,6 @@ class Bregman_SoR:
 
             self.Dh2_traj[iter] = (np.linalg.norm(
                 y)**4 / 4 - np.linalg.norm(x)**4 / 4 - np.linalg.norm(x)**2 * x @ (y-x))
-        self._flag_Dh = True
 
     def calculate_Dh_avg(self):
         self.calculate_Dh()
@@ -192,44 +193,48 @@ class Bregman_SoR:
             self.Dh1_avg_traj[i] = np.mean(self.Dh1_traj[:i + 1])
             self.Dh2_avg_traj[i] = np.mean(self.Dh2_traj[:i + 1])
 
-        self._flag_Dh_avg = True
     def plot(self, k1, k2, tau, avg=True):
         # if avg = True, plot the averaged D_h, if = False, plot each iteration
 
-        fig, (ax1, ax2, ax3, ax4) = plt.subplots(1, 4, figsize=(12, 4))
+        fig, axs = plt.subplots(2, 3 , figsize=(9, 8))  
         fig.suptitle(f"k1={k1: .2e}, k2 = {k2: .2e}")
 
         if avg == True:
-            if not self._flag_Dh_avg:
+            if len(self.Dh1_avg_traj) == 0:
                 self.calculate_Dh_avg()
-            ax1.plot(k1 * self.Dh1_avg_traj / tau**2)
-            ax1.set_ylabel(r"$E[D_{h_1}(\hat{x}^{k+1}, x^k)/\tau^2]$")
+            axs[0, 0].plot(k1 * self.Dh1_avg_traj / tau**2)
+            axs[0, 0].set_ylabel(r"$E[D_{h_1}(\hat{x}^{k+1}, x^k)/\tau^2]$")
 
-            ax2.plot(k2 * self.Dh2_avg_traj / tau**2)
-            ax2.set_ylabel(r"$E[D_{h_2}(\hat{x}^{k+1}, x^k)/\tau^2]$")
+            axs[0, 1].plot(k2 * self.Dh2_avg_traj / tau**2)
+            axs[0, 1].set_ylabel(r"$E[D_{h_2}(\hat{x}^{k+1}, x^k)/\tau^2]$")
 
-            ax3.plot((k1 * self.Dh1_avg_traj / tau**2 +
-                     k2 * self.Dh2_avg_traj / tau**2))
-            ax3.set_ylabel(r"$E[D_{h}(\hat{x}^{k+1}, x^k)/\tau^2]$")
+            axs[0, 2].plot((k1 * self.Dh1_avg_traj / tau**2 +
+                           k2 * self.Dh2_avg_traj / tau**2))
+            axs[0, 2].set_ylabel(r"$E[D_{h}(\hat{x}^{k+1}, x^k)/\tau^2]$")
 
         else:
-            if not self._flag_Dh:
+            if len(self.Dh1_traj) == 0:
                 self.calculate_Dh()
-            ax1.plot(k1 * self.Dh1_traj / tau**2)
-            ax1.set_ylabel(r"$D_{h_1}(\hat{x}^{k+1}, x^k)/\tau^2$")
+            axs[0, 0].plot(k1 * self.Dh1_traj / tau**2)
+            axs[0, 0].set_ylabel(r"$D_{h_1}(\hat{x}^{k+1}, x^k)/\tau^2$")
 
-            ax2.plot(k2 * self.Dh2_traj / tau**2)
-            ax2.set_ylabel(r"$D_{h_2}(\hat{x}^{k+1}, x^k)/\tau^2$")
+            axs[0, 1].plot(k2 * self.Dh2_traj / tau**2)
+            axs[0, 1].set_ylabel(r"$D_{h_2}(\hat{x}^{k+1}, x^k)/\tau^2$")
 
-            ax3.plot((k1 * self.Dh1_traj / tau**2 +
-                     k2 * self.Dh2_traj / tau**2))
-            ax3.set_ylabel(r"$D_{h}(\hat{x}^{k+1}, x^k)/\tau^2$")
-        ax4.plot(self.val_F_traj)
-        ax4.set_ylabel(r"$F(x^k)$")
-        #ax4.set_ylim(1e0, 1e2)
-
-        for ax in fig.get_axes():
+            axs[0, 2].plot((k1 * self.Dh1_traj / tau**2 +
+                           k2 * self.Dh2_traj / tau**2))
+            axs[0, 2].set_ylabel(r"$D_{h}(\hat{x}^{k+1}, x^k)/\tau^2$")
+        axs[1, 0].plot(self.val_F_traj)
+        axs[1, 0].set_ylabel(r"$F(x^k)$")
+        axs[1, 0].set_ylim(1e0, 1e6)
+        axs[1, 1].plot(np.linalg.norm(self.grad_F_traj, ord=2, axis=0)**2)
+        axs[1, 1].set_ylabel(r"$\|w^k\|^2$")
+        axs[1, 2].plot(np.linalg.norm(self.grad_Fdet_traj, ord=2, axis=0)**2)
+        axs[1, 2].set_ylabel(r"$\|\nabla F(x^k)\|^2$")
+        for ax in axs.flat:
             ax.set_xlabel("iteration")
             ax.set_yscale("log")
             ax.grid(True, alpha=0.5)
         fig.tight_layout()
+
+        # fig.show()

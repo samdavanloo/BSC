@@ -17,10 +17,11 @@ plt.rcParams.update({
     "ps.usedistiller": "xpdf"})
 
 
+# %%
 class SCSC_SoR(Bregman_SoR):
     def __init__(self,  A, batch_size, x_init, alpha, beta, max_iter, R, lmbda):
         # default setting for x_hat calculation
-        k1, k2, tau =158, 1.58, 0.025
+        k1, k2, tau = 63.1, 6.31, 0.025
         self.alpha = alpha
         super().__init__(A, batch_size, x_init, k1, k2, tau, beta, max_iter, R, lmbda)
 
@@ -35,14 +36,23 @@ class SCSC_SoR(Bregman_SoR):
         x = self.x_init
 
         # initial sample
+        A_sample = self._sample_A()
+        u = self._get_val_g(A_sample, x)
 
-        w = np.random.randn(self.d)
-        u = np.random.randn(2)
+        A_sample = self._sample_A()
+        v = self._get_grad_g(A_sample, x)
+        s = self._get_grad_f(u)
+        w = v.T @ s
+
+        grad_Fdet = self._get_grad_Fdet(x)
+        x_hat = self._solve_Breg_sub(x, grad_Fdet)
 
         # save initial information
         self.x_traj[:, 0] = x
-        self.x_hat_traj[:, 0] = self._get_x_hat(x)
+        self.x_hat_traj[:, 0] = x_hat
         self.val_F_traj[0] = self._get_val_F(x)
+        self.grad_Fdet_traj[:, 0] = grad_Fdet
+        self.grad_F_traj[:, 0] = w
 
         for iter in range(1, self.max_iter):
             x_pre = x
@@ -57,25 +67,15 @@ class SCSC_SoR(Bregman_SoR):
             s = self._get_grad_f(u)
             w = v.T @ s
 
+            grad_Fdet = self._get_grad_Fdet(x)
+            x_hat = self._solve_Breg_sub(x, grad_Fdet)
+
             # save information
             self.x_traj[:, iter] = x
-            self.x_hat_traj[:, iter] = self._get_x_hat(x)
+            self.x_hat_traj[:, iter] = x_hat
             self.val_F_traj[iter] = self._get_val_F(x)
-
-# define the function for grid search
-
-alpha_grid = np.logspace(-5, -3, num=6)
-def GridSearch(args):
-    i, = args
-
-    alpha = alpha_grid[i]
-    SCSC = SCSC_SoR(A, batch_size, x_init, alpha, beta, max_iter, R, lmbda)
-    SCSC.train()
-    SCSC.plot(64,1.5, 0.025, avg=True)
-
-    filename = f"Results/Grid_search/SCSC_GridSearch_i{i}.pdf"
-    plt.savefig(filename)
-    plt.close()
+            self.grad_Fdet_traj[:, iter] = grad_Fdet
+            self.grad_F_traj[:, iter] = w
 
 
 # parameters
@@ -111,27 +111,45 @@ A_norm2_avg = np.mean(np.linalg.norm(A, axis=(0, 1), ord=2)
 x_init = np.random.randn(d)
 x_init = x_init/np.linalg.norm(x_init)*R  # initial point
 
+# define the function for grid search
+
+alpha_grid = np.logspace(-5, -3, num=6)
+
+
+def GridSearch(args):
+    i, = args
+    batch_size = 500
+    max_iter = 300
+    alpha = alpha_grid[i]
+    SCSC = SCSC_SoR(A, batch_size, x_init, alpha, beta, max_iter, R, lmbda)
+    SCSC.train()
+    SCSC.plot(63.1, 6.31, 0.025, avg=True)
+
+    filename = f"Results/Grid_search/SCSC_GridSearch_i{i}.pdf"
+    plt.savefig(filename)
+    plt.close()
+
 
 # %%
-alpha = alpha_grid[3]
-beta = 0.5
+if "get_ipython" in dir():
+    alpha = 1.58e-4 # alpha_grid[3]
+    batch_size = 100
+    max_iter = 300
+    SCSC = SCSC_SoR(A, batch_size, x_init, alpha, beta, max_iter, R, lmbda)
+    SCSC.train()
 
-SCSC = SCSC_SoR(A, batch_size, x_init, alpha, beta, max_iter, R, lmbda)
-SCSC.train()
+    SCSC.plot(63.1, 6.31, 0.025, avg=True)
 
-# SCSC.plot(158, 1.58, 0.025, avg=True)
-
-# %%
 
 # %% Grid Search
 
-if __name__ == '__main__':
+if __name__ == '__main__' and "get_ipython" not in dir():
 
     grid_list = [range(6)]
     args = [p for p in itertools.product(*grid_list)]
     with Pool(8) as pool:
         # prepare arguments
-        
+
         # issue multiple tasks each with multiple arguments
         pool.map(GridSearch, args)
         pool.close()

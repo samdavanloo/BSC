@@ -21,7 +21,7 @@ class NASA_SoR(Bregman_SoR):
     def __init__(self,  A, batch_size, x_init, tau, beta, a, b, max_iter, R, lmbda):
         # default setting for x_hat calculation
 
-        super().__init__(A, batch_size, x_init, 158, 1.58, 0.025, 0.5, max_iter, R, lmbda)
+        super().__init__(A, batch_size, x_init, 63.1, 6.31, 0.025, 0.5, max_iter, R, lmbda)
         self.tau_NASA = tau
         self.beta_NASA = beta
         self.a = a
@@ -43,13 +43,24 @@ class NASA_SoR(Bregman_SoR):
     def train(self):
         x = self.x_init
 
-        w = np.random.randn(self.d)
-        u = np.random.randn(2)
+        # initial sample
+        A_sample = self._sample_A()
+        u = self._get_val_g(A_sample, x)
+
+        A_sample = self._sample_A()
+        v = self._get_grad_g(A_sample, x)
+        s = self._get_grad_f(u)
+        w = v.T @ s
+
+        grad_Fdet = self._get_grad_Fdet(x)
+        x_hat = self._solve_Breg_sub(x, grad_Fdet)
 
         # save initial information
         self.x_traj[:, 0] = x
-        self.x_hat_traj[:, 0] = self._get_x_hat(x)
+        self.x_hat_traj[:, 0] = x_hat
         self.val_F_traj[0] = self._get_val_F(x)
+        self.grad_Fdet_traj[:, 0] = grad_Fdet
+        self.grad_F_traj[:, 0] = w
 
         for iter in range(1, self.max_iter):
             x_pre = x
@@ -69,30 +80,15 @@ class NASA_SoR(Bregman_SoR):
 
             u = self._update_u(A_sample, u, x)
 
+            grad_Fdet = self._get_grad_Fdet(x)
+            x_hat = self._solve_Breg_sub(x, grad_Fdet)
+
             # save information
             self.x_traj[:, iter] = x
-            self.x_hat_traj[:, iter] = self._get_x_hat(x)
+            self.x_hat_traj[:, iter] = x_hat
             self.val_F_traj[iter] = self._get_val_F(x)
-
-
-# define the function for grid search
-tau_grid = np.logspace(-3, 0, num=6)
-beta_grid = np.logspace(1, 7, num=6)
-
-
-def GridSearch(args):
-    i, j = args
-    tau = tau_grid[i]
-    beta = beta_grid[j]
-    a = 0.5/tau
-    b = 0.5/tau
-    NASA = NASA_SoR(A, batch_size, x_init, tau, beta, a, b, max_iter, R, lmbda)
-    NASA.train()
-    NASA.plot(k1=100, k2=21.5, tau=0.025, avg=True)
-
-    filename = f"Results/Grid_search/NASA_GridSearch_i{i}_j{j}.pdf"
-    plt.savefig(filename)
-    plt.close()
+            self.grad_Fdet_traj[:, iter] = grad_Fdet
+            self.grad_F_traj[:, iter] = w
 
 
 # parameters
@@ -129,25 +125,47 @@ x_init = np.random.randn(d)
 x_init = x_init/np.linalg.norm(x_init)*R  # initial point
 
 
+# define the function for grid search
+tau_grid = np.logspace(-3, 0, num=6)
+beta_grid = np.logspace(1, 7, num=6)
+
+
+def GridSearch(args):
+    i, j = args
+    batch_size = 500
+    max_iter = 300
+    tau = tau_grid[i]
+    beta = beta_grid[j]
+    a = 0.5/tau
+    b = 0.5/tau
+    NASA = NASA_SoR(A, batch_size, x_init, tau, beta, a, b, max_iter, R, lmbda)
+    NASA.train()
+    NASA.plot(k1 = 63.1, k2 = 6.31, tau = 0.025, avg = True)
+
+    filename = f"Results/Grid_search/NASA_GridSearch_i{i}_j{j}.pdf"
+    plt.savefig(filename)
+    plt.close()
+
+
 # %%
-tau = tau_grid[2]
-beta = beta_grid[1]
-a = 0.5/tau
-b = 0.5/tau
+if "get_ipython" in dir():
+    tau = 0.063 #tau_grid[3]
+    beta = 158.5 # beta_grid[1]
+    a = 0.5/tau
+    b = 0.5/tau
 
-batch_size = 500
-NASA = NASA_SoR(A, batch_size, x_init, tau, beta, a, b, max_iter, R, lmbda)
-NASA.train()
+    batch_size = 100
+    NASA = NASA_SoR(A, batch_size, x_init, tau, beta, a, b, max_iter, R, lmbda)
+    NASA.train()
 
-NASA.plot(158, 1.58, 0.025, avg=True)
+    NASA.plot(63.1, 6.31, 0.025, avg=True)
 
-# %%
 
 # %% Grid Search
 
-if __name__ == '__main__':
+if __name__ == '__main__'and "get_ipython" not in dir():
 
-    grid_list = [range(7), range(7)]
+    grid_list = [range(6), range(6)]
     args = [p for p in itertools.product(*grid_list)]
     with Pool(8) as pool:
         # prepare arguments
