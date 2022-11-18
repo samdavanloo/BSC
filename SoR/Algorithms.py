@@ -54,7 +54,7 @@ class Bregman_SoR:
         self.grad_Fdet_traj = np.zeros([self.d, self.max_iter])
         self.grad_F_traj = np.zeros([self.d, self.max_iter])
         # D_h1,2(x_hat^{k+1}- x_hat^k)
-        self.Dh1_traj, self.Dh2_traj = [],[]
+        self.Dh1_traj, self.Dh2_traj = [], []
         # average of all previous iterations
         self.Dh1_avg_traj, self.Dh2_avg_traj = [], []
 
@@ -196,7 +196,7 @@ class Bregman_SoR:
     def plot(self, k1, k2, tau, avg=True):
         # if avg = True, plot the averaged D_h, if = False, plot each iteration
 
-        fig, axs = plt.subplots(2, 3 , figsize=(9, 8))  
+        fig, axs = plt.subplots(2, 3, figsize=(9, 8))
         fig.suptitle(f"k1={k1: .2e}, k2 = {k2: .2e}")
 
         if avg == True:
@@ -238,3 +238,137 @@ class Bregman_SoR:
         fig.tight_layout()
 
         # fig.show()
+
+
+class SCSC_SoR(Bregman_SoR):
+    def __init__(self,  A, batch_size, x_init, alpha, beta, max_iter, R, lmbda):
+        # default setting for x_hat calculation
+        k1, k2, tau = 63.1, 1.58, 0.025
+        self.alpha = alpha
+        super().__init__(A, batch_size, x_init, k1, k2, tau, beta, max_iter, R, lmbda)
+
+    def _projectd_gradient_step(self, x, w):
+        # gradient step
+        y = x - self.alpha * w
+        # projection
+        y = y * min(1, self.R/np.linalg.norm(y))
+        return y
+
+    def train(self):
+        x = self.x_init
+
+        # initial sample
+        A_sample = self._sample_A()
+        u = self._get_val_g(A_sample, x)
+
+        A_sample = self._sample_A()
+        v = self._get_grad_g(A_sample, x)
+        s = self._get_grad_f(u)
+        w = v.T @ s
+
+        grad_Fdet = self._get_grad_Fdet(x)
+        x_hat = self._solve_Breg_sub(x, grad_Fdet)
+
+        # save initial information
+        self.x_traj[:, 0] = x
+        self.x_hat_traj[:, 0] = x_hat
+        self.val_F_traj[0] = self._get_val_F(x)
+        self.grad_Fdet_traj[:, 0] = grad_Fdet
+        self.grad_F_traj[:, 0] = w
+
+        for iter in range(1, self.max_iter):
+            x_pre = x
+            # update
+            x = self._projectd_gradient_step(x, w)
+
+            A_sample = self._sample_A()
+            u = self._update_u(A_sample, u, x_pre, x)
+
+            A_sample = self._sample_A()
+            v = self._get_grad_g(A_sample, x)
+            s = self._get_grad_f(u)
+            w = v.T @ s
+
+            grad_Fdet = self._get_grad_Fdet(x)
+            x_hat = self._solve_Breg_sub(x, grad_Fdet)
+
+            # save information
+            self.x_traj[:, iter] = x
+            self.x_hat_traj[:, iter] = x_hat
+            self.val_F_traj[iter] = self._get_val_F(x)
+            self.grad_Fdet_traj[:, iter] = grad_Fdet
+            self.grad_F_traj[:, iter] = w
+
+
+class NASA_SoR(Bregman_SoR):
+    def __init__(self,  A, batch_size, x_init, tau, beta, a, b, max_iter, R, lmbda):
+        # default setting for x_hat calculation
+
+        super().__init__(A, batch_size, x_init, 63.1, 1.58, 0.025, 0.5, max_iter, R, lmbda)
+        self.tau_NASA = tau
+        self.beta_NASA = beta
+        self.a = a
+        self.b = b
+
+    def _projectd_gradient_step(self, x, w):
+        # gradient step
+        y = x - 1 / self.beta_NASA * w
+        # projection
+        y = y * min(1, self.R/np.linalg.norm(y))
+        return y
+
+    def _update_u(self, A_sample, u, x):
+        # update inner function value estimator
+        g = self._get_val_g(A_sample, x)
+        u = (1 - self.b * self.tau_NASA) * u + self.b * self.tau_NASA * g
+        return u
+
+    def train(self):
+        x = self.x_init
+
+        # initial sample
+        A_sample = self._sample_A()
+        u = self._get_val_g(A_sample, x)
+
+        A_sample = self._sample_A()
+        v = self._get_grad_g(A_sample, x)
+        s = self._get_grad_f(u)
+        w = v.T @ s
+
+        grad_Fdet = self._get_grad_Fdet(x)
+        x_hat = self._solve_Breg_sub(x, grad_Fdet)
+
+        # save initial information
+        self.x_traj[:, 0] = x
+        self.x_hat_traj[:, 0] = x_hat
+        self.val_F_traj[0] = self._get_val_F(x)
+        self.grad_Fdet_traj[:, 0] = grad_Fdet
+        self.grad_F_traj[:, 0] = w
+
+        for iter in range(1, self.max_iter):
+            x_pre = x
+            # update
+
+            y = self._projectd_gradient_step(x, w)
+            if iter == 1:
+                x = y
+            else:
+                x = x_pre + self.tau_NASA * (y - x_pre)
+
+            s = self._get_grad_f(u)
+            A_sample = self._sample_A()
+            J = self._get_grad_g(A_sample, x)
+            w = (1 - self.a * self.tau_NASA) * w + \
+                self.a * self.tau_NASA * J.T @ s
+
+            u = self._update_u(A_sample, u, x)
+
+            grad_Fdet = self._get_grad_Fdet(x)
+            x_hat = self._solve_Breg_sub(x, grad_Fdet)
+
+            # save information
+            self.x_traj[:, iter] = x
+            self.x_hat_traj[:, iter] = x_hat
+            self.val_F_traj[iter] = self._get_val_F(x)
+            self.grad_Fdet_traj[:, iter] = grad_Fdet
+            self.grad_F_traj[:, iter] = w
