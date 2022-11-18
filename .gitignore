@@ -1,7 +1,6 @@
 # MAC OS
 .DS_Store
 
-*.pdf
 *.pickle
 
 # Editors
@@ -130,3 +129,4 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+SoR/Results/Grid_search
