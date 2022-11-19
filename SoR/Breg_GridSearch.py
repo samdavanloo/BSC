@@ -283,12 +283,12 @@ x_init = x_init/np.linalg.norm(x_init)*R  # initial point
 # %% define the function for grid search
 
 
-k1_grid = np.logspace(-1, 1, num=6)
-k2_grid = np.logspace(-4, 2, num=6)
+k1_grid = np.logspace(-2, 2, num=6)
+k2_grid = np.logspace(-3, 1, num=6)
 
 
 def GridSearch(args):
-    batch_size = 1
+    batch_size = 100
     max_iter = 300
     i, j = args
     k1 = k1_grid[i]
@@ -305,19 +305,16 @@ def GridSearch(args):
 
 # %% Selected parameters
 if "get_ipython" in dir():
-    batch_size =1
+    batch_size = 1
     max_iter = 300
 
-    k1 = k1_grid[1]*2
-    k2 = k2_grid[4]/2
-
-    #k1, k2 =10, 1.58e-1
-    # k1,k2 = 3.98,0.398
+    k1 = k1_grid[1]
+    k2 = k2_grid[4]
 
     Breg_SoR = Bregman_SoR(A, batch_size, x_init, k1, k2,
                            tau, beta, max_iter, R, lmbda)
     Breg_SoR.train()
-    Breg_SoR.plot(k1, k2,1, avg=True)
+    Breg_SoR.plot(k1, k2, 1, avg=True)
 
 # %% Grid Search
 

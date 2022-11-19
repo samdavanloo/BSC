@@ -76,9 +76,10 @@ class SCSC_SoR(Bregman_SoR):
             self.grad_Fdet_traj[:, iter] = grad_Fdet
             self.grad_F_traj[:, iter] = w
 
+
 # parameters
 d = 50  # dimension of matrix
-n = 5000  # number of random matrix
+n = 1000  # number of random matrix
 lmbda = 10  # weight of var part
 R = 10  # constraint norm(x) <= R
 noise_level = 0.5
@@ -116,14 +117,14 @@ alpha_grid = np.logspace(-4, 0, num=6)
 
 def GridSearch(args):
     i, = args
-    batch_size = 300
-    max_iter = 100
-    k1, k2, tau_Breg = 6.31,0.398, 0.025
+    batch_size = 100
+    max_iter = 300
+    k1, k2, tau_Breg = 15.84, 6.31e-3, 0.025
     alpha = alpha_grid[i]
     SCSC = SCSC_SoR(A, batch_size, x_init, alpha, beta,
                     max_iter, R, lmbda, k1, k2, tau_Breg)
     SCSC.train()
-    SCSC.plot(k1, k2, tau_Breg, avg=False)
+    SCSC.plot(k1, k2, tau_Breg, avg=True)
 
     filename = f"Results/Grid_search/SCSC_GridSearch_i{i}.pdf"
     plt.savefig(filename)
@@ -135,7 +136,7 @@ if "get_ipython" in dir():
     alpha = 3.98e-3  # alpha_grid[3]
     batch_size = 100
     max_iter = 300
-    k1, k2, tau_Breg = 6.31, 0.398 , 0.025
+    k1, k2, tau_Breg = 15.84, 6.31e-3, 0.025
 
     SCSC = SCSC_SoR(A, batch_size, x_init, alpha, beta,
                     max_iter, R, lmbda, k1, k2, tau_Breg)

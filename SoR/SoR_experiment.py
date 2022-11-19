@@ -65,20 +65,21 @@ x_init = np.random.randn(d)
 x_init = x_init/np.linalg.norm(x_init)*R  # initial point
 
 
-
 # %% Repeat algorithm and save the result
 
 oracles = 300*300  # total oracles to samples
 
 number_experiment = 20  # number of repeated experiment
 
-k1, k2, beta_Breg =10, 1.58e-3, 0.5
+beta_Breg = 0.5
+k1, k2 = 15.84, 6.31e-3
 tau_Breg = 0.025
-alpha =  3.98e-3
+alpha = 6.3e-4
 tau_NASA, beta_NASA = 0.063, 6.31
 a = b = beta_Breg/tau_NASA
 
 batch_list = [100]
+
 
 def task_compare_algs(args):
     # create different random seed for multiprocess
@@ -111,12 +112,12 @@ def task_compare_algs(args):
     with open(folder + f'NASA_batch{batch_size}_exp{idx_exp}.pickle', 'wb') as file:
         pickle.dump(NASA, file)
     print(
-         f"finish batch {batch_size}, example No.{idx_exp},seed {seed}", flush=True)
+        f"finish batch {batch_size}, example No.{idx_exp},seed {seed}", flush=True)
 
 
 def task_compare_batch(args):
-    k1,k2 =0.25*2, 2.15
-    batch_list = [100,10,1]
+    k1, k2 = 0.25*2, 2.15
+    batch_list = [100, 10, 1]
     oracles = 100*300
     folder = f'Results/exp_batch_compare/'
     seed = (os.getpid() * int(time.time())) % 123456789
@@ -132,10 +133,11 @@ def task_compare_batch(args):
     with open(folder + f'Breg_batch{batch_size}_exp{idx_exp}.pickle', 'wb') as file:
         pickle.dump(BG, file)
     print(
-         f"finish batch {batch_size}, example No.{idx_exp},seed {seed}", flush=True)
+        f"finish batch {batch_size}, example No.{idx_exp},seed {seed}", flush=True)
+
 
 if __name__ == '__main__' and "get_ipython" not in dir():
-    
+
     list = [range(len(batch_list)), range(20)]
     args = [p for p in itertools.product(*list)]
     with Pool(8) as pool:
