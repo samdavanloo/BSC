@@ -113,10 +113,10 @@ def task_compare_algs(args):
     print(
          f"finish batch {batch_size}, example No.{idx_exp},seed {seed}", flush=True)
 
-k1,k2 =0.25*2, 2.15
-batch_list = [100,10,1]
+
 def task_compare_batch(args):
-    
+    k1,k2 =0.25*2, 2.15
+    batch_list = [100,10,1]
     oracles = 100*300
     folder = f'Results/exp_batch_compare/'
     seed = (os.getpid() * int(time.time())) % 123456789
@@ -141,7 +141,7 @@ if __name__ == '__main__' and "get_ipython" not in dir():
     with Pool(8) as pool:
 
         # issue multiple tasks each with multiple arguments
-        #pool.imap(task_compare_algs, args)
-        pool.imap(task_compare_batch, args)
+        pool.imap(task_compare_algs, args)
+        #pool.imap(task_compare_batch, args)
         pool.close()
         pool.join()
