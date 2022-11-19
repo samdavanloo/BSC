@@ -251,7 +251,7 @@ d = 50  # dimension of matrix
 n = 1000  # number of random matrix
 lmbda = 10  # weight of var part
 R = 10  # constraint norm(x) <= R
-noise_level = 3
+noise_level = 0.5
 Lf = 2*lmbda
 Lg = 1
 tau = min(0.5, Lf/(Lf+8), 1/Lf) / 2
@@ -283,40 +283,41 @@ x_init = x_init/np.linalg.norm(x_init)*R  # initial point
 # %% define the function for grid search
 
 
-k1_grid = np.logspace(1, 3, num=6)
-k2_grid = np.logspace(-1, 3, num=6)
+k1_grid = np.logspace(-1, 1, num=6)
+k2_grid = np.logspace(-4, 2, num=6)
 
 
 def GridSearch(args):
-    batch_size = 10
-    max_iter = 100
+    batch_size = 1
+    max_iter = 300
     i, j = args
     k1 = k1_grid[i]
     k2 = k2_grid[j]
     Breg_SoR = Bregman_SoR(A, batch_size, x_init, k1,
                            k2, tau, beta, max_iter, R, lmbda)
     Breg_SoR.train()
-    Breg_SoR.plot(k1, k2, tau, avg=False)
+    Breg_SoR.plot(k1, k2, tau, avg=True)
 
-    filename = f"Results/GridSearch_singleBatch/Breg_GridSearch_i{i}_j{j}.pdf"
+    filename = f"Results/Grid_Search/Breg_GridSearch_i{i}_j{j}.pdf"
     plt.savefig(filename)
     plt.close()
 
 
 # %% Selected parameters
 if "get_ipython" in dir():
-    batch_size =100
-    max_iter = 30
+    batch_size =1
+    max_iter = 300
 
-    k1 = k1_grid[2]
-    k2 = k2_grid[3]
+    k1 = k1_grid[1]*2
+    k2 = k2_grid[4]/2
 
-    k1, k2 = 63.1,1.58
+    #k1, k2 =10, 1.58e-1
+    # k1,k2 = 3.98,0.398
 
     Breg_SoR = Bregman_SoR(A, batch_size, x_init, k1, k2,
                            tau, beta, max_iter, R, lmbda)
     Breg_SoR.train()
-    Breg_SoR.plot(63.1, 1.58,1, avg=False)
+    Breg_SoR.plot(k1, k2,1, avg=True)
 
 # %% Grid Search
 

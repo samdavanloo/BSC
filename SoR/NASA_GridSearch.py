@@ -95,10 +95,10 @@ class NASA_SoR(Bregman_SoR):
 
 # parameters
 d = 50  # dimension of matrix
-n = 1000  # number of random matrix
+n = 5000  # number of random matrix
 lmbda = 10  # weight of var part
 R = 10  # constraint norm(x) <= R
-noise_level = 3
+noise_level = 0.5
 Lf = 2*lmbda
 Lg = 1
 tau = min(0.5, Lf/(Lf+8), 1/Lf) / 2
@@ -127,24 +127,27 @@ x_init = np.random.randn(d)
 x_init = x_init/np.linalg.norm(x_init)*R  # initial point
 
 
+
+
 # define the function for grid search
 tau_grid = np.logspace(-3, 0, num=6)
-beta_grid = np.logspace(1, 7, num=6)
+beta_grid = np.logspace(-4, 2, num=6)
 
 
 def GridSearch(args):
     i, j = args
-    batch_size = 500
+    batch_size = 100
     max_iter = 300
     tau = tau_grid[i]
     beta = beta_grid[j]
     a = 0.5/tau
     b = 0.5/tau
-    k1, k2, tau_Breg, beta_Breg = 63.1, 1.58, 0.025, 0.5
+    k1, k2, tau_Breg, beta_Breg =10, 1.58e-3, 0.025,0.5
+    
     NASA = NASA_SoR(A, batch_size, x_init, tau, beta, a, b,
                     max_iter, R, lmbda, k1, k2, tau_Breg, beta_Breg)
     NASA.train()
-    NASA.plot(k1, k2, tau_Breg, avg=True)
+    NASA.plot(k1, k2, tau_Breg, avg=False)
 
     filename = f"Results/Grid_search/NASA_GridSearch_i{i}_j{j}.pdf"
     plt.savefig(filename)
@@ -157,18 +160,17 @@ if "get_ipython" in dir():
     beta = 158.5  # beta_grid[1]
     a = 0.5/tau
     b = 0.5/tau
-
+    tau = tau_grid[3]
+    beta = beta_grid[4]#2
     batch_size = 100
-    max_iter = 100
-    for _ in range(20):
-        k1, k2, tau_Breg, beta_Breg = 63.1, 1.58, 0.025, 0.5
-        NASA = NASA_SoR(A, batch_size, x_init, tau, beta, a, b,
-                        max_iter, R, lmbda, k1, k2, tau_Breg, beta_Breg)
-        NASA.train()
-        NASA.calculate_measure_avg()
-    # NASA.plot(k1, k2, tau_Breg, avg=True)
-        plt.plot(NASA.norm_gradF_traj)
-        plt.yscale('log')
+    max_iter = 300
+    k1, k2, tau_Breg, beta_Breg = 63.1, 1.58, 0.025, 0.5
+    NASA = NASA_SoR(A, batch_size, x_init, tau, beta, a, b,
+                    max_iter, R, lmbda, k1, k2, tau_Breg, beta_Breg)
+    NASA.train()
+    NASA.calculate_measure_avg()
+    NASA.plot(k1, k2, tau_Breg, avg=True)
+
 
 
 # %% Grid Search

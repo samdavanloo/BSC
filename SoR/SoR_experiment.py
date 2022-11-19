@@ -31,18 +31,21 @@ plt.rcParams.update({
     "font.sans-serif": ["Helvetica"],
     "ps.usedistiller": "xpdf"})
 
-# Parameters
+# parameters
 d = 50  # dimension of matrix
 n = 1000  # number of random matrix
 lmbda = 10  # weight of var part
 R = 10  # constraint norm(x) <= R
-noise_level = 3
+noise_level = 0.5
 Lf = 2*lmbda
 Lg = 1
 tau = min(0.5, Lf/(Lf+8), 1/Lf) / 2
 beta = Lf * tau
 
-# Generate data
+batch_size = 500
+max_iter = 300
+
+# Generate matrix
 np.random.seed(10)
 A_avg = np.random.randn(d, d)
 A_avg = (A_avg+A_avg.T)/2
@@ -62,19 +65,20 @@ x_init = np.random.randn(d)
 x_init = x_init/np.linalg.norm(x_init)*R  # initial point
 
 
+
 # %% Repeat algorithm and save the result
 
 oracles = 300*300  # total oracles to samples
-batch_list = [300, 100]  # , 50]
 
 number_experiment = 20  # number of repeated experiment
 
-k1, k2, beta_Breg = 63.1, 1.58, 0.5
+k1, k2, beta_Breg =10, 1.58e-3, 0.5
 tau_Breg = 0.025
-alpha = 1.58e-4
-tau_NASA, beta_NASA = 0.063, 158.5
+alpha =  3.98e-3
+tau_NASA, beta_NASA = 0.063, 6.31
 a = b = beta_Breg/tau_NASA
 
+batch_list = [100]
 
 def task_compare_algs(args):
     # create different random seed for multiprocess
@@ -107,17 +111,19 @@ def task_compare_algs(args):
     with open(folder + f'NASA_batch{batch_size}_exp{idx_exp}.pickle', 'wb') as file:
         pickle.dump(NASA, file)
     print(
-        f"finish batch {batch_size}, example No.{idx_exp},seed {seed}", flush=True)
+         f"finish batch {batch_size}, example No.{idx_exp},seed {seed}", flush=True)
 
+k1,k2 =0.25*2, 2.15
+batch_list = [100,10,1]
 def task_compare_batch(args):
-    batch_list = [200,100,50]
-    folder = f'Results/exp_batch/'
+    
+    oracles = 100*300
+    folder = f'Results/exp_batch_compare/'
     seed = (os.getpid() * int(time.time())) % 123456789
     np.random.seed(seed)
     i, idx_exp = args
     batch_size = batch_list[i]
     max_iter = oracles // batch_size
-
     BG = Bregman_SoR(A, batch_size, x_init, k1, k2,
                      tau, beta, max_iter, R, lmbda)
     BG.train()
@@ -125,14 +131,17 @@ def task_compare_batch(args):
     # save class
     with open(folder + f'Breg_batch{batch_size}_exp{idx_exp}.pickle', 'wb') as file:
         pickle.dump(BG, file)
+    print(
+         f"finish batch {batch_size}, example No.{idx_exp},seed {seed}", flush=True)
 
 if __name__ == '__main__' and "get_ipython" not in dir():
-    batch_list = [100,50,10,1]
+    
     list = [range(len(batch_list)), range(20)]
     args = [p for p in itertools.product(*list)]
     with Pool(8) as pool:
 
         # issue multiple tasks each with multiple arguments
-        pool.imap(task_compare_algs, args)
+        #pool.imap(task_compare_algs, args)
+        pool.imap(task_compare_batch, args)
         pool.close()
         pool.join()
