@@ -23,9 +23,12 @@ class Bregman_SoR:
     Result Attributes:
         x_traj: trajectory of x
         x_hat_traj: trajectory of x_hat
-        val_F_traj: trajectory of deterministic function value
         Dh1, Dh2: D_h(x_hat^{k+1}, x_hat^k)
         Dh1_avg, Dh1_x_avg: 1/k sum_0^k D_h(x_hat^{k+1}, x_hat^k)
+        val_F_traj, val_F_avg_traj: trajectory of deterministic function value
+        grad_Fdet_traj, grad_F_traj: trajectory of deterministic gradient and estimated gradient
+        norm_gradFdet_traj, norm_gradFdet_avg_traj: (averaged) norm of deterministic gradient
+        self.norm_gradF_traj, norm_gradF_avg_traj: (averaged) norm of estimated gradient
 
     """
 
@@ -50,9 +53,15 @@ class Bregman_SoR:
         self.x_hat_traj = np.zeros([self.d, self.max_iter])
         # traj of determinastic function value
         self.val_F_traj = np.zeros(self.max_iter)
+        self.val_F_avg_traj = []
         # determinastic gradient and sample gradient
         self.grad_Fdet_traj = np.zeros([self.d, self.max_iter])
         self.grad_F_traj = np.zeros([self.d, self.max_iter])
+        self.norm_gradFdet_traj = []
+        self.norm_gradF_traj = []
+        self.norm_gradFdet_avg_traj = [ ]
+        self.norm_gradF_avg_traj = []
+
         # D_h1,2(x_hat^{k+1}- x_hat^k)
         self.Dh1_traj, self.Dh2_traj = [], []
         # average of all previous iterations
@@ -182,16 +191,23 @@ class Bregman_SoR:
 
             self.Dh2_traj[iter] = (np.linalg.norm(
                 y)**4 / 4 - np.linalg.norm(x)**4 / 4 - np.linalg.norm(x)**2 * x @ (y-x))
+        self.norm_gradF_traj = np.linalg.norm(self.grad_F_traj, ord=2, axis=0)**2
+        self.norm_gradFdet_traj= np.linalg.norm(self.grad_Fdet_traj, ord=2, axis=0)**2
 
-    def calculate_Dh_avg(self):
+    def calculate_measure_avg(self):
         self.calculate_Dh()
 
-        self.Dh1_avg_traj = np.zeros_like(self.Dh1_traj)
-        self.Dh2_avg_traj = np.zeros_like(self.Dh2_traj)
+        self.Dh1_avg_traj = np.cumsum(
+            self.Dh1_traj)/np.arange(1, len(self.Dh1_traj)+1)
+        self.Dh2_avg_traj = np.cumsum(
+            self.Dh2_traj)/np.arange(1, len(self.Dh2_traj)+1)
 
-        for i in range(self.max_iter):
-            self.Dh1_avg_traj[i] = np.mean(self.Dh1_traj[:i + 1])
-            self.Dh2_avg_traj[i] = np.mean(self.Dh2_traj[:i + 1])
+        self.val_F_avg_traj = np.cumsum(
+            self.val_F_traj) / np.arange(1, len(self.val_F_traj)+1)
+        self.norm_gradFdet_avg_traj = np.cumsum(
+            self.norm_gradFdet_traj) / np.arange(1, len(self.norm_gradFdet_traj)+1)
+        self.norm_gradF_avg_traj= np.cumsum(
+            self.norm_gradF_traj) / np.arange(1, len(self.norm_gradF_traj)+1)
 
     def plot(self, k1, k2, tau, avg=True):
         # if avg = True, plot the averaged D_h, if = False, plot each iteration
@@ -201,7 +217,7 @@ class Bregman_SoR:
 
         if avg == True:
             if len(self.Dh1_avg_traj) == 0:
-                self.calculate_Dh_avg()
+                self.calculate_measure_avg()
             axs[0, 0].plot(k1 * self.Dh1_avg_traj / tau**2)
             axs[0, 0].set_ylabel(r"$E[D_{h_1}(\hat{x}^{k+1}, x^k)/\tau^2]$")
 
@@ -211,7 +227,13 @@ class Bregman_SoR:
             axs[0, 2].plot((k1 * self.Dh1_avg_traj / tau**2 +
                            k2 * self.Dh2_avg_traj / tau**2))
             axs[0, 2].set_ylabel(r"$E[D_{h}(\hat{x}^{k+1}, x^k)/\tau^2]$")
-
+            axs[1, 0].plot(self.val_F_avg_traj)
+            axs[1, 0].set_ylabel(r"$E[F(x^k)]$")
+            axs[1, 0].set_ylim(1e0, 1e6)
+            axs[1, 1].plot(self.norm_gradF_avg_traj)
+            axs[1, 1].set_ylabel(r"$E[\|w^k\|^2]$")
+            axs[1, 2].plot(self.norm_gradFdet_avg_traj)
+            axs[1, 2].set_ylabel(r"$E[\|\nabla F(x^k)\|]^2$")
         else:
             if len(self.Dh1_traj) == 0:
                 self.calculate_Dh()
@@ -224,13 +246,14 @@ class Bregman_SoR:
             axs[0, 2].plot((k1 * self.Dh1_traj / tau**2 +
                            k2 * self.Dh2_traj / tau**2))
             axs[0, 2].set_ylabel(r"$D_{h}(\hat{x}^{k+1}, x^k)/\tau^2$")
-        axs[1, 0].plot(self.val_F_traj)
-        axs[1, 0].set_ylabel(r"$F(x^k)$")
-        axs[1, 0].set_ylim(1e0, 1e6)
-        axs[1, 1].plot(np.linalg.norm(self.grad_F_traj, ord=2, axis=0)**2)
-        axs[1, 1].set_ylabel(r"$\|w^k\|^2$")
-        axs[1, 2].plot(np.linalg.norm(self.grad_Fdet_traj, ord=2, axis=0)**2)
-        axs[1, 2].set_ylabel(r"$\|\nabla F(x^k)\|^2$")
+            axs[1, 0].plot(self.val_F_traj)
+            axs[1, 0].set_ylabel(r"$F(x^k)$")
+            axs[1, 0].set_ylim(1e0, 1e6)
+            axs[1, 1].plot(self.norm_gradF_traj)
+            axs[1, 1].set_ylabel(r"$\|w^k\|^2$")
+            axs[1, 2].plot(self.norm_gradFdet_traj)
+            axs[1, 2].set_ylabel(r"$\|\nabla F(x^k)\|^2$")
+
         for ax in axs.flat:
             ax.set_xlabel("iteration")
             ax.set_yscale("log")
@@ -241,11 +264,10 @@ class Bregman_SoR:
 
 
 class SCSC_SoR(Bregman_SoR):
-    def __init__(self,  A, batch_size, x_init, alpha, beta, max_iter, R, lmbda):
+    def __init__(self,  A, batch_size, x_init, alpha, beta, max_iter, R, lmbda, k1, k2, tau_Breg):
         # default setting for x_hat calculation
-        k1, k2, tau = 63.1, 1.58, 0.025
         self.alpha = alpha
-        super().__init__(A, batch_size, x_init, k1, k2, tau, beta, max_iter, R, lmbda)
+        super().__init__(A, batch_size, x_init, k1, k2, tau_Breg, beta, max_iter, R, lmbda)
 
     def _projectd_gradient_step(self, x, w):
         # gradient step
@@ -301,10 +323,11 @@ class SCSC_SoR(Bregman_SoR):
 
 
 class NASA_SoR(Bregman_SoR):
-    def __init__(self,  A, batch_size, x_init, tau, beta, a, b, max_iter, R, lmbda):
+    def __init__(self,  A, batch_size, x_init, tau, beta, a, b, max_iter, R, lmbda, k1, k2, tau_Breg, beta_Breg):
         # default setting for x_hat calculation
 
-        super().__init__(A, batch_size, x_init, 63.1, 1.58, 0.025, 0.5, max_iter, R, lmbda)
+        super().__init__(A, batch_size, x_init, k1, k2,
+                         tau_Breg, beta_Breg, max_iter, R, lmbda)
         self.tau_NASA = tau
         self.beta_NASA = beta
         self.a = a

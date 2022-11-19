@@ -19,11 +19,10 @@ plt.rcParams.update({
 
 # %%
 class SCSC_SoR(Bregman_SoR):
-    def __init__(self,  A, batch_size, x_init, alpha, beta, max_iter, R, lmbda):
+    def __init__(self,  A, batch_size, x_init, alpha, beta, max_iter, R, lmbda, k1, k2, tau_Breg):
         # default setting for x_hat calculation
-        k1, k2, tau = 63.1, 6.31, 0.025
         self.alpha = alpha
-        super().__init__(A, batch_size, x_init, k1, k2, tau, beta, max_iter, R, lmbda)
+        super().__init__(A, batch_size, x_init, k1, k2, tau_Breg, beta, max_iter, R, lmbda)
 
     def _projectd_gradient_step(self, x, w):
         # gradient step
@@ -120,10 +119,12 @@ def GridSearch(args):
     i, = args
     batch_size = 500
     max_iter = 300
+    k1, k2, tau_Breg = 63.1, 1.58, 0.025
     alpha = alpha_grid[i]
-    SCSC = SCSC_SoR(A, batch_size, x_init, alpha, beta, max_iter, R, lmbda)
+    SCSC = SCSC_SoR(A, batch_size, x_init, alpha, beta,
+                    max_iter, R, lmbda, k1, k2, tau_Breg)
     SCSC.train()
-    SCSC.plot(63.1, 6.31, 0.025, avg=True)
+    SCSC.plot(k1, k2, tau_Breg, avg=True)
 
     filename = f"Results/Grid_search/SCSC_GridSearch_i{i}.pdf"
     plt.savefig(filename)
@@ -132,13 +133,16 @@ def GridSearch(args):
 
 # %%
 if "get_ipython" in dir():
-    alpha = 1.58e-4 # alpha_grid[3]
+    alpha = 1.58e-4  # alpha_grid[3]
     batch_size = 100
     max_iter = 300
-    SCSC = SCSC_SoR(A, batch_size, x_init, alpha, beta, max_iter, R, lmbda)
+    k1, k2, tau_Breg = 63.1, 1.58, 0.025
+
+    SCSC = SCSC_SoR(A, batch_size, x_init, alpha, beta,
+                    max_iter, R, lmbda, k1, k2, tau_Breg)
     SCSC.train()
 
-    SCSC.plot(63.1, 6.31, 0.025, avg=True)
+    SCSC.plot(k1, k2, tau_Breg, avg=True)
 
 
 # %% Grid Search

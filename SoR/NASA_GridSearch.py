@@ -18,10 +18,12 @@ plt.rcParams.update({
 
 
 class NASA_SoR(Bregman_SoR):
-    def __init__(self,  A, batch_size, x_init, tau, beta, a, b, max_iter, R, lmbda):
+    def __init__(self,  A, batch_size, x_init, tau, beta, a, b, max_iter, R, lmbda, k1, k2, tau_Breg, beta_Breg):
         # default setting for x_hat calculation
 
-        super().__init__(A, batch_size, x_init, 63.1, 6.31, 0.025, 0.5, max_iter, R, lmbda)
+        super().__init__(A, batch_size, x_init, k1, k2,
+                         tau_Breg, beta_Breg, max_iter, R, lmbda)
+
         self.tau_NASA = tau
         self.beta_NASA = beta
         self.a = a
@@ -138,9 +140,11 @@ def GridSearch(args):
     beta = beta_grid[j]
     a = 0.5/tau
     b = 0.5/tau
-    NASA = NASA_SoR(A, batch_size, x_init, tau, beta, a, b, max_iter, R, lmbda)
+    k1, k2, tau_Breg, beta_Breg = 63.1, 1.58, 0.025, 0.5
+    NASA = NASA_SoR(A, batch_size, x_init, tau, beta, a, b,
+                    max_iter, R, lmbda, k1, k2, tau_Breg, beta_Breg)
     NASA.train()
-    NASA.plot(k1 = 63.1, k2 = 6.31, tau = 0.025, avg = True)
+    NASA.plot(k1, k2, tau_Breg, avg=True)
 
     filename = f"Results/Grid_search/NASA_GridSearch_i{i}_j{j}.pdf"
     plt.savefig(filename)
@@ -149,21 +153,27 @@ def GridSearch(args):
 
 # %%
 if "get_ipython" in dir():
-    tau = 0.063 #tau_grid[3]
-    beta = 158.5 # beta_grid[1]
+    tau = 0.063  # tau_grid[3]
+    beta = 158.5  # beta_grid[1]
     a = 0.5/tau
     b = 0.5/tau
 
     batch_size = 100
-    NASA = NASA_SoR(A, batch_size, x_init, tau, beta, a, b, max_iter, R, lmbda)
-    NASA.train()
-
-    NASA.plot(63.1, 6.31, 0.025, avg=True)
+    max_iter = 100
+    for _ in range(20):
+        k1, k2, tau_Breg, beta_Breg = 63.1, 1.58, 0.025, 0.5
+        NASA = NASA_SoR(A, batch_size, x_init, tau, beta, a, b,
+                        max_iter, R, lmbda, k1, k2, tau_Breg, beta_Breg)
+        NASA.train()
+        NASA.calculate_measure_avg()
+    # NASA.plot(k1, k2, tau_Breg, avg=True)
+        plt.plot(NASA.norm_gradF_traj)
+        plt.yscale('log')
 
 
 # %% Grid Search
 
-if __name__ == '__main__'and "get_ipython" not in dir():
+if __name__ == '__main__' and "get_ipython" not in dir():
 
     grid_list = [range(6), range(6)]
     args = [p for p in itertools.product(*grid_list)]
