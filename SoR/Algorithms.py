@@ -59,7 +59,7 @@ class Bregman_SoR:
         self.grad_F_traj = np.zeros([self.d, self.max_iter])
         self.norm_gradFdet_traj = []
         self.norm_gradF_traj = []
-        self.norm_gradFdet_avg_traj = [ ]
+        self.norm_gradFdet_avg_traj = []
         self.norm_gradF_avg_traj = []
 
         # D_h1,2(x_hat^{k+1}- x_hat^k)
@@ -82,10 +82,12 @@ class Bregman_SoR:
 
     def _get_val_F(self, x):
         # get deterministic function value at x
-        temp = np.einsum('j,ijk,i', x, self.A, x)
-        temp = np.mean(temp**2)
+        # temp = 1/2*np.einsum('j,ijk,i', x, self.A, x)
+        # temp = np.mean(temp**2)
+        temp = 1/2*np.einsum('j,ijk,i', x, self.A, x)
+        var = np.var(temp)
 
-        return -1/2 * x.T @ self.A_avg @ x + self.lmbda*(temp - 1/4*(x.T @ self.A_avg @ x)**2)
+        return -1/2 * x.T @ self.A_avg @ x + self.lmbda*var
 
     def _get_grad_h(self, x):
         # get gradient of geneartining function h(x)
@@ -191,8 +193,10 @@ class Bregman_SoR:
 
             self.Dh2_traj[iter] = (np.linalg.norm(
                 y)**4 / 4 - np.linalg.norm(x)**4 / 4 - np.linalg.norm(x)**2 * x @ (y-x))
-        self.norm_gradF_traj = np.linalg.norm(self.grad_F_traj, ord=2, axis=0)**2
-        self.norm_gradFdet_traj= np.linalg.norm(self.grad_Fdet_traj, ord=2, axis=0)**2
+        self.norm_gradF_traj = np.linalg.norm(
+            self.grad_F_traj, ord=2, axis=0)**2
+        self.norm_gradFdet_traj = np.linalg.norm(
+            self.grad_Fdet_traj, ord=2, axis=0)**2
 
     def calculate_measure_avg(self):
         self.calculate_Dh()
@@ -206,7 +210,7 @@ class Bregman_SoR:
             self.val_F_traj) / np.arange(1, len(self.val_F_traj)+1)
         self.norm_gradFdet_avg_traj = np.cumsum(
             self.norm_gradFdet_traj) / np.arange(1, len(self.norm_gradFdet_traj)+1)
-        self.norm_gradF_avg_traj= np.cumsum(
+        self.norm_gradF_avg_traj = np.cumsum(
             self.norm_gradF_traj) / np.arange(1, len(self.norm_gradF_traj)+1)
 
     def plot(self, k1, k2, tau, avg=True):
@@ -229,7 +233,7 @@ class Bregman_SoR:
             axs[0, 2].set_ylabel(r"$E[D_{h}(\hat{x}^{k+1}, x^k)/\tau^2]$")
             axs[1, 0].plot(self.val_F_avg_traj)
             axs[1, 0].set_ylabel(r"$E[F(x^k)]$")
-            axs[1, 0].set_ylim(1e0, 1e6)
+            #axs[1, 0].set_ylim(1e0, 1e6)
             axs[1, 1].plot(self.norm_gradF_avg_traj)
             axs[1, 1].set_ylabel(r"$E[\|w^k\|^2]$")
             axs[1, 2].plot(self.norm_gradFdet_avg_traj)
@@ -248,7 +252,7 @@ class Bregman_SoR:
             axs[0, 2].set_ylabel(r"$D_{h}(\hat{x}^{k+1}, x^k)/\tau^2$")
             axs[1, 0].plot(self.val_F_traj)
             axs[1, 0].set_ylabel(r"$F(x^k)$")
-            axs[1, 0].set_ylim(1e0, 1e6)
+            #axs[1, 0].set_ylim(1e0, 1e6)
             axs[1, 1].plot(self.norm_gradF_traj)
             axs[1, 1].set_ylabel(r"$\|w^k\|^2$")
             axs[1, 2].plot(self.norm_gradFdet_traj)
@@ -259,6 +263,7 @@ class Bregman_SoR:
             ax.set_yscale("log")
             ax.grid(True, alpha=0.5)
         fig.tight_layout()
+        axs[1, 0].set_yscale('linear')
 
         # fig.show()
 
