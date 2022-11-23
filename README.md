@@ -9,15 +9,17 @@ For any question or comment, please contact Yin Liu at liu.6630@osu.edu.
 ## Content
 ```
 .
-├── Algorithms.py	        // the Bregman gradient methods of SoR and RoS problem, NASA, and	│													SCSC algorithm
-├── SoR_experiment.py           // code for solving SoR  
-├── SoR_result_process.py       // code for figures 
-├── RoS_experiment              // code for solving RoS
-└── RoS_result_process.py       // code for figures 
+├── Algorithms.py	        // algorithms of  SoR, RoR, RoS-VR, SCSC, NASA
+├── SoR_experiment.py     // code for solving risk-averse problem(SoR) 
+├── SoR_plot.ipynb	      // code for figures 
+├── RoS_experiment.py     // code for solving policy evaluation problem(RoS)
+└── RoS_plot.ipynb	      // code for figures
 
 ```
 
 ## Requirement
 
 The package `CVXPY` is required to solve the subproblem of the RoS composition. 
+
+`multiprocessing` package is used in the experiment, it can be replaced by changing the  `pool.imap()` to for loop
 
