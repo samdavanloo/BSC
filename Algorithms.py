@@ -1,11 +1,12 @@
 import numpy as np
+import cvxpy as cp
 import matplotlib.pyplot as plt
 
 # Define the class for Bregman SoR method
 
 
 class Bregman_SoR:
-    """ parrent class for SOR algorithms, based on the risk-averse of quadratic function, provide function and gradient estimators for this specific problem and Bregman method
+    """ parrent class for SOR algorithms, based on the risk-averse of quadratic function
 
     Attributes:
         A: samples of A_xi
@@ -23,8 +24,8 @@ class Bregman_SoR:
     Result Attributes:
         x_traj: trajectory of x
         x_hat_traj: trajectory of x_hat
-        Dh1, Dh2: D_h(x_hat^{k+1}, x_hat^k)
-        Dh1_avg, Dh1_x_avg: 1/k sum_0^k D_h(x_hat^{k+1}, x_hat^k)
+        Dh1, Dh2: D_h(x_hat^{k+1}, x^k)
+        Dh1_avg, Dh1_x_avg: 1/k sum_0^k D_h(x_hat^{k+1}, x^k)
         val_F_traj, val_F_avg_traj: trajectory of deterministic function value
         grad_Fdet_traj, grad_F_traj: trajectory of deterministic gradient and estimated gradient
         norm_gradFdet_traj, norm_gradFdet_avg_traj: (averaged) norm of deterministic gradient
@@ -252,7 +253,6 @@ class Bregman_SoR:
             axs[0, 2].set_ylabel(r"$D_{h}(\hat{x}^{k+1}, x^k)/\tau^2$")
             axs[1, 0].plot(self.val_F_traj)
             axs[1, 0].set_ylabel(r"$F(x^k)$")
-            #axs[1, 0].set_ylim(1e0, 1e6)
             axs[1, 1].plot(self.norm_gradF_traj)
             axs[1, 1].set_ylabel(r"$\|w^k\|^2$")
             axs[1, 2].plot(self.norm_gradFdet_traj)
@@ -264,8 +264,6 @@ class Bregman_SoR:
             ax.grid(True, alpha=0.5)
         fig.tight_layout()
         axs[1, 0].set_yscale('linear')
-
-        # fig.show()
 
 
 class SCSC_SoR(Bregman_SoR):
@@ -400,3 +398,384 @@ class NASA_SoR(Bregman_SoR):
             self.val_F_traj[iter] = self._get_val_F(x)
             self.grad_Fdet_traj[:, iter] = grad_Fdet
             self.grad_F_traj[:, iter] = w
+
+
+class RoS:
+    """class for RoR, RoS-VR algorithms, based on the policy evaluation problem, 
+
+    Attributes:
+        A: samples of A_xi
+        batch_grad: batch size for inner/outer gradient, large batch of gradient for RoS-VR
+        batch_grad_S: small batch of gradient for RoS-VR
+        batch_val: batch size for inner function value, large batch for RoS-VR
+        batch_val_S: small batch of inner value for RoS-VR
+        max_iter: maximum iteration number of the algorithm
+        max_k_iter, max_j_iter: outer and inner loop iteration number for RoS-VR
+        x_init: initial x
+        tau, lmbda: step size
+        alpha, beta: coefs of SCSC
+        beta_NASA, tau_NASA, a_NASA, b_NASA: coefs of NASA
+        A_avg: E[A_xi]
+
+    Result Attributes:
+        x_traj: trajectory of x
+        x_tilde_traj: trajectory of x_tilde
+        Dh ||x_tilde^{k+1}- x^k||^2
+        Dh_avg, Dh1_x_avg:1/k sum_0^k ||x_tilde^{k+1}- x^k||^2
+        val_F_traj, val_F_avg_traj: trajectory of deterministic function value
+        grad_Fdet_traj, grad_F_traj: trajectory of deterministic gradient and estimated gradient
+        norm_gradFdet_traj, norm_gradFdet_avg_traj: (averaged) norm of deterministic gradient
+        norm_gradF_traj, norm_gradF_avg_traj: (averaged) norm of estimated gradient
+        oracle_grad, oracle_val: track of oracles up to each iteration
+
+    """
+
+    def __init__(self, A, b, tau, lmbda, alpha, beta, beta_NASA, tau_NASA, a_NASA, b_NASA, batch_grad, batch_grad_S, batch_val, batch_val_S, max_iter, max_k_iter, max_j_iter, x_init):
+        self.A = A
+        self.b = b
+        self.n = A.shape[1]
+        self.N = A.shape[2]
+        self.A_avg = np.mean(A, 2)
+        self.b_avg = np.mean(b, 1)
+        self.Lf = self.b_avg.sum()
+        self.tau = tau
+        self.lmbda = lmbda
+        self.alpha = alpha
+        self.beta = beta
+        self.beta_NASA = beta_NASA
+        self.tau_NASA = tau_NASA
+        self.a_NASA = a_NASA
+        self.b_NASA = b_NASA
+        self.max_iter = max_iter
+        self.batch_grad_S = batch_grad_S
+        self.batch_val_S = batch_val_S
+        self.max_k_iter = max_k_iter
+        self.max_j_iter = max_j_iter
+        self.x_init = x_init
+
+        self.batch_grad = batch_grad
+        self.batch_val = batch_val
+
+        self.x_traj = np.zeros([self.n, self.max_iter])  # traj of x
+        # traj of x_tilde(calculated based on determinastic function)
+        self.x_tilde_traj = np.zeros([self.n, self.max_iter])
+        # traj of determinastic function value
+        self.val_F_traj = np.zeros(self.max_iter)
+        self.val_F_avg_traj = []
+        # determinastic gradient and sample gradient
+        self.prox_grad_traj = np.zeros([self.n, self.max_iter])
+        self.grad_F_traj = np.zeros([self.n, self.max_iter])
+        self.norm_gradFdet_traj = []
+        self.norm_gradF_traj = []
+        self.norm_gradFdet_avg_traj = []
+        self.norm_gradF_avg_traj = []
+
+        self.Dh_traj = np.zeros(self.max_iter)
+        self.Dh_avg_traj = []
+
+        self.oracle_grad = np.zeros(self.max_iter)
+        self.oracle_val = np.zeros(self.max_iter)
+
+    def _calculate_x_tilde(self, x_pre):
+        g = self.A_avg @ x_pre
+
+        grad_g = self.A_avg
+        grad_f = 1 - self.b_avg/g
+
+        grad_F = grad_g.T @ grad_f
+
+        y = cp.Variable(self.n)
+        constraints = [y >= 0]
+        grad_hf = - 1/g
+        hf_linear = - cp.sum(cp.log(g + grad_g@(y-x_pre)))
+
+        sub_loss = (self.tau * grad_F - self.Lf * grad_g.T @ grad_hf) @ y + self.Lf * \
+            hf_linear + self.lmbda / 2 * cp.sum_squares(y-x_pre)
+
+        obj = cp.Minimize(sub_loss)
+        prob = cp.Problem(obj, constraints)
+        prob.solve()  # return the result of subproblem
+        return y.value
+
+    def _calculate_grad_F(self, x):
+        g = self.A_avg @ x
+        grad_g = self.A_avg
+        grad_f = 1 - self.b_avg/g
+        grad_F = grad_g.T @ grad_f
+        return grad_F
+
+    def _get_val_F(self, x):
+        g = self.A_avg @ x
+        val_F = np.sum(self.b_avg * np.log(self.b_avg) +
+                       g - self.b_avg * np.log(g)-self.b_avg)
+        return val_F
+
+    def train_BG(self):
+        x = self.x_init
+        oracle_val = 0
+        oracle_grad = 0
+
+        self.x_traj[:, 0] = x
+        self.x_tilde_traj[:, 0] = self._calculate_x_tilde(x)
+        self.prox_grad_traj[:, 0] = self._calculate_grad_F(x)
+        self.val_F_traj[0] = self._get_val_F(x)
+
+        for iter in range(1, self.max_iter):
+            # u update
+            i = np.random.randint(0, self.N, self.batch_val)
+            u = np.mean(self.A[:, :, i], 2) @ x
+            # w update
+
+            i = np.random.randint(0, self.N, self.batch_grad)
+            v = np.mean(self.A[:, :, i], 2)
+
+            i = np.random.randint(0, self.N, self.batch_grad)
+            s = 1 - np.mean(self.b[:, i], 1)/u
+
+            w = v.T @ s
+            # solve the subproblem
+            y = cp.Variable(self.n)
+            constraints = [y >= 0]
+
+            grad_hf = - 1/u
+            hf_linear = - cp.sum(cp.log(u + v@(y-x)))
+
+            sub_loss = (self.tau * w - self.Lf * v.T @ grad_hf) @ y + self.Lf * \
+                hf_linear + self.lmbda / 2 * cp.sum_squares(y-x)
+
+            obj = cp.Minimize(sub_loss)
+            prob = cp.Problem(obj, constraints)
+            prob.solve()  # return the result of subproblem
+
+            # save the result
+            x = y.value
+            self.x_traj[:, iter] = x
+
+            oracle_val = oracle_val + self.batch_val
+            oracle_grad = oracle_grad + self.batch_grad
+            self.oracle_grad[iter] = oracle_grad
+            self.oracle_val[iter] = oracle_val
+
+            self.grad_F_traj[:, iter] = w
+            self.x_tilde_traj[:, iter] = self._calculate_x_tilde(x)
+            self.prox_grad_traj[:, iter] = self._calculate_grad_F(x)
+            self.val_F_traj[iter] = self._get_val_F(x)
+
+    def train_BGVR(self):
+        x = self.x_init
+        oracle_val = 0
+        oracle_grad = 0
+        iter = 0
+
+        self.x_traj[:, 0] = x
+        self.x_tilde_traj[:, 0] = self._calculate_x_tilde(x)
+        self.prox_grad_traj[:, 0] = self._calculate_grad_F(x)
+        self.val_F_traj[0] = self._get_val_F(x)
+        x_pre = x
+        iter = 0
+        for iter_k in range(self.max_k_iter):
+            for iter_j in range(self.max_j_iter):
+                iter = iter + 1
+                if iter_j == 0:
+                    # u update
+                    i = np.random.randint(0, self.N, self.batch_val)
+                    u = np.mean(self.A[:, :, i], 2) @ x
+
+                    i = np.random.randint(0, self.N, self.batch_grad)
+                    v = np.mean(self.A[:, :, i], 2)
+                    oracle_val = oracle_val + self.batch_val
+                    oracle_grad = oracle_grad + self.batch_grad
+                else:
+                    u_pre = u
+                    v_pre = v
+                    i = np.random.randint(0, self.N, self.batch_val_S)
+                    u = u_pre + np.mean(self.A[:, :, i], 2) @ (x - x_pre)
+                    v = v_pre
+                    oracle_val = oracle_val + self.batch_val_S
+                    oracle_grad = oracle_grad + self.batch_grad_S
+                # s update
+                i = np.random.randint(0, self.N, self.batch_grad)
+                s = 1 - np.mean(self.b[:, i], 1) / u
+                # solve the problem
+                w = v.T @ s
+
+                x_pre = x
+
+                y = cp.Variable(self.n)
+                constraints = [y >= 0]
+
+                grad_hf = - 1/u
+                hf_linear = - cp.sum(cp.log(u + v@(y-x)))
+
+                sub_loss = (self.tau * w - self.Lf * v.T @ grad_hf) @ y + self.Lf * \
+                    hf_linear + self.lmbda / 2 * cp.sum_squares(y-x)
+
+                obj = cp.Minimize(sub_loss)
+                prob = cp.Problem(obj, constraints)
+                prob.solve()  # return the result of subproblem
+
+                x = y.value
+            # save the result
+                self.x_traj[:, iter] = x
+
+                self.oracle_grad[iter] = oracle_grad
+                self.oracle_val[iter] = oracle_val
+
+                self.grad_F_traj[:, iter] = w
+                self.x_tilde_traj[:, iter] = self._calculate_x_tilde(x)
+                self.prox_grad_traj[:, iter] = self._calculate_grad_F(x)
+                self.val_F_traj[iter] = self._get_val_F(x)
+
+    def train_NASA(self):
+        oracle_val, oracle_grad = 0, 0
+        x = self.x_init
+
+        # initial sample
+        i = np.random.randint(0, self.N, self.batch_val)
+        u = np.mean(self.A[:, :, i], 2) @ x
+
+        i = np.random.randint(0, self.N, self.batch_grad)
+        v = np.mean(self.A[:, :, i], 2)
+
+        i = np.random.randint(0, self.N, self.batch_grad)
+        s = 1 - np.mean(self.b[:, i], 1)/u
+
+        w = v.T @ s
+
+        self.x_traj[:, 0] = x
+        self.x_tilde_traj[:, 0] = self._calculate_x_tilde(x)
+        self.prox_grad_traj[:, 0] = self._calculate_grad_F(x)
+        self.val_F_traj[0] = self._get_val_F(x)
+        self.grad_F_traj[:, 0] = w
+
+        for iter in range(1, self.max_iter):
+            x_pre = x
+#            # update
+            y = x - 1/self.beta_NASA * w
+            y[y < 0] = 1e-16
+            if iter == 1:
+                x = y
+            else:
+                x = x_pre + self.tau_NASA * (y - x_pre)
+
+            i = np.random.randint(0, self.N, self.batch_grad)
+            s = 1 - np.mean(self.b[:, i], 1)/u
+            i = np.random.randint(0, self.N, self.batch_grad)
+            J = np.mean(self.A[:, :, i], 2)
+
+            w = (1 - self.a_NASA * self.tau_NASA) * w + \
+                self.a_NASA * self.tau_NASA * J.T @ s
+            i = np.random.randint(0, self.N, self.batch_grad)
+            g = np.mean(self.A[:, :, i], 2) @ x
+            u = (1 - self.b_NASA * self.tau_NASA) * \
+                u + self.b_NASA * self.tau_NASA * g
+            self.x_traj[:, iter] = x
+
+            oracle_val = oracle_val + self.batch_val
+            oracle_grad = oracle_grad + self.batch_grad
+            self.oracle_grad[iter] = oracle_grad
+            self.oracle_val[iter] = oracle_val
+
+            self.grad_F_traj[:, iter] = w
+            self.x_tilde_traj[:, iter] = self._calculate_x_tilde(x)
+            self.prox_grad_traj[:, iter] = self._calculate_grad_F(x)
+            self.val_F_traj[iter] = self._get_val_F(x)
+
+    def train_SCSC(self):
+
+        oracle_val, oracle_grad = 0, 0
+        x = self.x_init
+        i = np.random.randint(0, self.N, self.batch_val)
+        u = np.mean(self.A[:, :, i], 2) @ x
+
+        i = np.random.randint(0, self.N, self.batch_grad)
+        v = np.mean(self.A[:, :, i], 2)
+        s = 1 - np.mean(self.b[:, i], 1) / u
+        w = v.T @ s
+
+        self.x_traj[:, 0] = x
+        self.x_tilde_traj[:, 0] = self._calculate_x_tilde(x)
+        self.prox_grad_traj[:, 0] = self._calculate_grad_F(x)
+        self.val_F_traj[0] = self._get_val_F(x)
+        self.grad_F_traj[:, 0] = w
+
+        for iter in range(1, self.max_iter):
+            x_pre = x
+
+            x = x - self.alpha * w
+            x[x < 0] = 1e-16
+
+            i = np.random.randint(0, self.N, self.batch_val)
+            g = np.mean(self.A[:, :, i], 2) @ x
+            g_pre = np.mean(self.A[:, :, i], 2) @ x_pre
+
+            u = (1 - self.beta) * (u + g - g_pre) + self.beta * g
+            i = np.random.randint(0, self.N, self.batch_grad)
+            v = np.mean(self.A[:, :, i], 2)
+            i = np.random.randint(0, self.N, self.batch_grad)
+            s = 1 - np.mean(self.b[:, i], 1) / u
+
+            w = v.T @ s
+
+            oracle_val = oracle_val + self.batch_val
+            oracle_grad = oracle_grad + self.batch_grad
+            self.x_traj[:, iter] = x
+
+            self.oracle_grad[iter] = oracle_grad
+            self.oracle_val[iter] = oracle_val
+
+            self.grad_F_traj[:, iter] = w
+            self.x_tilde_traj[:, iter] = self._calculate_x_tilde(x)
+            self.prox_grad_traj[:, iter] = self._calculate_grad_F(x)
+            self.val_F_traj[iter] = self._get_val_F(x)
+
+    def calculate_measure(self):
+        # calculate Dh for x_tilde
+        self.Dh_traj = np.linalg.norm(
+            self.x_tilde_traj - self.x_traj, ord=2, axis=0) ** 2
+        self.norm_gradF_traj = np.linalg.norm(
+            self.grad_F_traj, ord=2, axis=0) ** 2
+        self.norm_gradFdet_traj = np.linalg.norm(
+            self.prox_grad_traj, ord=2, axis=0) ** 2
+
+        self.norm_gradFdet_avg_traj = []
+        self.norm_gradF_avg_traj = []
+        # average
+        self.Dh_avg_traj = np.cumsum(
+            self.Dh_traj) / np.arange(1, len(self.Dh_traj)+1)
+        self.norm_gradF_avg_traj = np.cumsum(
+            self.norm_gradF_traj) / np.arange(1, len(self.norm_gradF_traj)+1)
+        self.norm_gradFdet_avg_traj = np.cumsum(
+            self.norm_gradFdet_traj) / np.arange(1, len(self.norm_gradFdet_traj)+1)
+        self.val_F_avg_traj = np.cumsum(
+            self.val_F_traj) / np.arange(1, len(self.val_F_traj)+1)
+
+    def plot(self, tau, lmbda, avg=True):
+        # if avg = True, plot the averaged D_h, if = False, plot each iteration
+
+        fig, axs = plt.subplots(2, 2, figsize=(8, 6))
+        fig.suptitle(f"tau={tau: .2e}, lambda = {lmbda: .2e}")
+
+        if avg == True:
+            axs[0, 0].plot(self.Dh_avg_traj / tau**2)
+            axs[0, 0].set_ylabel(r"$E[D_{h}(\tilde{x}^{k+1}, x^k)/\tau^2]$")
+            axs[0, 1].plot(self.val_F_avg_traj)
+            axs[0, 1].set_ylabel(r"$E[F(x^k)]$")
+            axs[1, 0].plot(self.norm_gradF_avg_traj[1:-1])
+            axs[1, 0].set_ylabel(r"$E[\|w^k\|^2]$")
+            axs[1, 1].plot(self.norm_gradFdet_avg_traj)
+            axs[1, 1].set_ylabel(r"$E[\|\nabla F(x^k)\|]^2$")
+        else:
+            axs[0, 0].plot(self.Dh_traj / tau**2)
+            axs[0, 0].set_ylabel(r"$E[D_{h}(\tilde{x}^{k+1}, x^k)/\tau^2]$")
+            axs[0, 1].plot(self.val_F_traj)
+            axs[0, 1].set_ylabel(r"$E[F(x^k)]$")
+            axs[1, 0].plot(self.norm_gradF_traj[1:-1])
+            axs[1, 0].set_ylabel(r"$E[\|w^k\|^2]$")
+            axs[1, 1].plot(self.norm_gradFdet_traj)
+            axs[1, 1].set_ylabel(r"$E[\|\bar{x}^{k+1} - x^k\|]^2/\tau^2$")
+        for ax in axs.flat:
+            ax.set_xlabel("iteration")
+            ax.set_yscale("log")
+            ax.grid(True, alpha=0.5)
+        fig.tight_layout()
