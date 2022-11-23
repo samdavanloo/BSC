@@ -9,13 +9,10 @@ For any question or comment, please contact Yin Liu at liu.6630@osu.edu.
 ## Content
 ```
 .
-├── method_Bregman.py	        // the Bregman gradient methods of SoR and RoS problem
-├── SoR_gridsearch.py           // grid search for the hyper-parameters
+├── Algorithms.py	        // the Bregman gradient methods of SoR and RoS problem, NASA, and	│													SCSC algorithm
 ├── SoR_experiment.py           // code for solving SoR  
 ├── SoR_result_process.py       // code for figures 
-├── RoS_gridsearch.py           // grid search for the hyper-parameters
-├── RoS_experiment              // code for solving RoS by SGD
-├── RoS_VR_experiment.py    // code for solving RoS by SPIDER
+├── RoS_experiment              // code for solving RoS
 └── RoS_result_process.py       // code for figures 
 
 ```
